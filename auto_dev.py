@@ -197,8 +197,11 @@ def verify_flutter():
     return True, "FLUTTER OK (tests pass):\n" + t_out + lint_note
 
 def git_diff():
-    _, s = run(["git", "--no-pager", "diff", "--stat", "HEAD"], cwd=PROJECT_DIR, timeout=60)
-    _, d = run(["git", "--no-pager", "diff", "HEAD"], cwd=PROJECT_DIR, timeout=60)
+    # Stage everything first so NEW (untracked) files appear in the diff. Without this,
+    # `git diff HEAD` omits brand-new files and the verifier sees an empty change set.
+    run(["git", "add", "-A"], cwd=PROJECT_DIR, timeout=60)
+    _, s = run(["git", "--no-pager", "diff", "--cached", "--stat"], cwd=PROJECT_DIR, timeout=60)
+    _, d = run(["git", "--no-pager", "diff", "--cached"], cwd=PROJECT_DIR, timeout=60)
     return (s + "\n" + d)[:8000]
 
 def git_commit(task_id, summary):
@@ -225,6 +228,36 @@ def reference_context(task_body):
             chunks.append(f"--- reference/{ref.name} ---\n{ref.read_text(encoding='utf-8')}")
     return "\n\n".join(chunks)
 
+def existing_source_context():
+    """
+    Give the doer the ACTUAL existing lib/core source so it uses real class/enum APIs
+    instead of inventing incompatible ones (e.g. SocialLink.handle, PlaceDepth.livedThere).
+    Includes all current .dart files under lib/core, capped for size.
+    """
+    core = PROJECT_DIR / "lib" / "core"
+    if not core.exists():
+        return ""
+    chunks, total = [], 0
+    for f in sorted(core.rglob("*.dart")):
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        rel = f.relative_to(PROJECT_DIR).as_posix()
+        block = f"--- EXISTING FILE: {rel} (use these exact APIs; do not redefine) ---\n{text}"
+        total += len(block)
+        if total > 24000:   # keep the prompt bounded
+            break
+        chunks.append(block)
+    return "\n\n".join(chunks)
+
+def git_clean_worktree():
+    """Discard uncommitted changes so a FAILED task never leaves broken files on disk.
+    Unstage first (git_diff stages via `git add -A`), then restore tracked + delete new."""
+    run(["git", "reset"], cwd=PROJECT_DIR, timeout=60)
+    run(["git", "checkout", "--", "."], cwd=PROJECT_DIR, timeout=60)
+    run(["git", "clean", "-fd", "lib", "test"], cwd=PROJECT_DIR, timeout=60)
+
 def parse_verdict(text):
     m = re.search(r"(?im)^\s*VERDICT:\s*(PASS|FIX|NEEDS-DECISION)\b", text)
     return m.group(1).upper() if m else "FIX"
@@ -248,6 +281,7 @@ def do_task(path, dry_run=False):
 
     sys_prompt = opus_system_prompt()
     refs = reference_context(body)
+    existing = existing_source_context()
 
     # 1) OPUS PLANS
     log("  -> Opus (orchestrator) planning doer instructions...")
@@ -256,15 +290,20 @@ def do_task(path, dry_run=False):
         {"role": "user", "content":
             f"TASK {task_id}.\n\nTask spec:\n{body}\n\n"
             + (f"Reference material:\n{refs}\n\n" if refs else "")
+            + (f"EXISTING project source (use these EXACT class names, fields, enum values, "
+               f"and import paths; NEVER invent APIs or import files that are not shown "
+               f"here):\n{existing}\n\n" if existing else "")
             + "Write precise, literal instructions for the coding model to perform ONLY "
-              "this task: exact file paths and exact file contents. No added scope. "
+              "this task: exact file paths and exact file contents. Imports and type names "
+              "MUST match the existing source shown above. No added scope. "
               "Output only the instructions."},
     ])
 
     # 2) DOER WRITES
     written, ok = doer(plan)
     if not ok:
-        log(f"STOP. {task_id}: doer produced no usable files. Re-run later.")
+        log(f"STOP. {task_id}: doer produced no usable files. Cleaning up. Re-run later.")
+        git_clean_worktree()
         return "BLOCKED"
 
     # 3+4) JUDGE + OPUS VERIFY (fix loop)
@@ -295,6 +334,7 @@ def do_task(path, dry_run=False):
             return "DONE"
         if verdict == "NEEDS-DECISION":
             log(f"STOP. Opus raised NEEDS-DECISION:\n{verdict_text}")
+            log("  (leaving files in place for human review; run `git status` to inspect)")
             return "STOP"
         if verdict == "PASS" and not flut_ok:
             log("  Opus said PASS but flutter is RED -> overriding to FIX (ground truth wins).")
@@ -308,10 +348,13 @@ def do_task(path, dry_run=False):
             "Do NOT change versions, Firebase config, or secrets. Do NOT edit tests to "
             f"force them green. Apply exactly this fix for {task_id}:\n\n{fix_instr}")
         if not ok:
-            log(f"STOP. {task_id}: doer produced no fix. Re-run later.")
+            log(f"STOP. {task_id}: doer produced no fix. Cleaning up. Re-run later.")
+            git_clean_worktree()
             return "BLOCKED"
 
-    log(f"STOP. {task_id} still failing after {MAX_FIX_ATTEMPTS} attempts. Human needed.")
+    log(f"STOP. {task_id} still failing after {MAX_FIX_ATTEMPTS} attempts. "
+        "Discarding the broken attempt so the tree stays clean. Re-run later.")
+    git_clean_worktree()
     return "BLOCKED"
 
 def main():
