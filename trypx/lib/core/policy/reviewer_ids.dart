@@ -1,5 +1,7 @@
 /// Reviewer ids look like "reviewer:sneha". Machines ("ai:","system:") and
 /// "unassigned" are never human. Ported from ReviewerIds.kt.
+library;
+
 import 'location_ids.dart';
 
 class ReviewerIds {

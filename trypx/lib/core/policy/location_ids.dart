@@ -1,6 +1,8 @@
 /// Stable location id from country + place name. Ported from LocationIds.kt.
 /// Keeps letters of every script (so "京都" never collapses to empty).
 /// Backs the 50-per-location cap (invariant 17).
+library;
+
 class LocationIds {
   LocationIds._();
 
@@ -20,8 +22,8 @@ class LocationIds {
   static String _trimChar(String s, String ch) {
     var start = 0;
     var end = s.length;
-    while (start < end && s[start] == ch) start++;
-    while (end > start && s[end - 1] == ch) end--;
+    while (start < end && s[start] == ch) { start++; }
+    while (end > start && s[end - 1] == ch) { end--; }
     return s.substring(start, end);
   }
 }

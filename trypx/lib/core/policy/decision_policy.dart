@@ -1,5 +1,7 @@
 /// Decision validation. Ported from DecisionPolicy.kt.
 /// A reason must be >= 10 chars. APPROVED/REJECTED are final.
+library;
+
 import '../models/enums.dart';
 import 'reviewer_ids.dart';
 

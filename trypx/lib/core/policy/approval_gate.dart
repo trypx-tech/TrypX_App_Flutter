@@ -1,6 +1,8 @@
 /// Pure approval rules. Ported from ApprovalGate.kt. Order matters:
 /// human decision -> human reviewer -> outcome -> language -> location cap.
 /// Invariant 12: no approval without a human decision.
+library;
+
 import '../models/enums.dart';
 
 enum BlockReason {

@@ -1,6 +1,7 @@
-﻿/// TrypX core enums and constants.
+/// TrypX core enums and constants.
 /// Ported verbatim from the Android reference repo (OnboardingEnums.kt + PlaceDepth.kt).
 /// These encode system invariants 11, 12, 14, 17, 19 — do not change values.
+library;
 
 /// Hard ceiling of verified suppliers per location (invariant 17).
 const int kLocationSupplierCap = 50;
