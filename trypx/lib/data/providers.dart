@@ -32,30 +32,25 @@ final googleSignInProvider = Provider<GoogleSignIn>((ref) {
   return GoogleSignIn.instance;
 });
 
-Future<UserCredential?> signInWithGoogle(WidgetRef ref) async {
+Future<UserCredential> signInWithGoogle(WidgetRef ref) async {
   final googleSignIn = ref.read(googleSignInProvider);
   final auth = ref.read(firebaseAuthProvider);
 
-  // Initialize if not already (assuming default configs are fine for this context)
+  // Initialize must be called exactly once before any other method.
+  // We can try to initialize, and if it throws because it's already initialized, we ignore it.
   try {
     await googleSignIn.initialize();
-  } catch (e) {
-    // Already initialized or initialization failed, proceed
+  } catch (_) {
+    // Ignore already initialized
   }
 
-  try {
-    final googleUser = await googleSignIn.authenticate();
-    
-    // In version 7, authentication is a getter, not a future.
-    final googleAuth = googleUser.authentication;
-    final credential = GoogleAuthProvider.credential(
-      idToken: googleAuth.idToken,
-      // accessToken is only available via the authorization API in v7,
-      // but idToken is sufficient for Firebase Auth.
-    );
+  // authenticate() throws GoogleSignInException on cancellation or failure.
+  final googleUser = await googleSignIn.authenticate();
+  
+  final googleAuth = googleUser.authentication;
+  final credential = GoogleAuthProvider.credential(
+    idToken: googleAuth.idToken,
+  );
 
-    return await auth.signInWithCredential(credential);
-  } catch (e) {
-    return null;
-  }
+  return await auth.signInWithCredential(credential);
 }

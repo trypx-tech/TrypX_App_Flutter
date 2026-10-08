@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
 import 'core/design_system/trypx_theme.dart';
@@ -36,30 +37,63 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends ConsumerWidget {
+class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+  ConsumerState<AuthGate> createState() => _AuthGateState();
+}
 
+class _AuthGateState extends ConsumerState<AuthGate> {
+  bool _isLoading = false;
+
+  Future<void> _handleSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await signInWithGoogle(ref);
+    } catch (e) {
+      debugPrint('Google Sign In Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign in failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      body: authState.when(
-        data: (user) {
-          if (user == null) {
-            return Center(
-              child: TrypXPrimaryButton(
-                text: 'Sign in with Google',
-                onPressed: () async {
-                  await signInWithGoogle(ref);
-                },
-              ),
-            );
+      body: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
-          return const HomeMenu();
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (snapshot.hasData) {
+            return const HomeMenu();
+          }
+          return Center(
+            child: _isLoading
+                ? const CircularProgressIndicator()
+                : TrypXPrimaryButton(
+                    text: 'Sign in with Google',
+                    onPressed: _handleSignIn,
+                  ),
+          );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error: $e')),
       ),
     );
   }
@@ -70,7 +104,7 @@ class HomeMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).value;
+    final user = FirebaseAuth.instance.currentUser;
     
     return Scaffold(
       appBar: AppBar(
@@ -78,7 +112,7 @@ class HomeMenu extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(firebaseAuthProvider).signOut(),
+            onPressed: () => FirebaseAuth.instance.signOut(),
           )
         ],
       ),
