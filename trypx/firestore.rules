@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function applicantPath(uid) {
+      return /databases/$(database)/documents/applicants/$(uid);
+    }
+
+    function decisionPath(uid) {
+      return /databases/$(database)/documents/reviewer_decisions/$(uid);
+    }
+
+    function locationPath(locationId) {
+      return /databases/$(database)/documents/locations/$(locationId);
+    }
+
+    function reviewerPath(uid) {
+      return /databases/$(database)/documents/reviewers/$(uid);
+    }
+
+    function humanUid(uid) {
+      return uid is string && !uid.matches('^(ai:|system:).*');
+    }
+
+    // The allow-list is created/maintained ONLY by trusted administrators.
+    // Both the Firebase Auth UID and verified token email must match.
+    function isReviewer() {
+      return signedIn()
+        && humanUid(request.auth.uid)
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true
+        && exists(reviewerPath(request.auth.uid))
+        && get(reviewerPath(request.auth.uid)).data.active == true
+        && get(reviewerPath(request.auth.uid)).data.isHuman == true
+        && get(reviewerPath(request.auth.uid)).data.email == request.auth.token.email;
+    }
+
+    // An approval MUST atomically increment the existing location counter.
+    function counterBumpedFor(uid, locationId) {
+      return exists(locationPath(locationId))
+        && get(locationPath(locationId)).data.active == true
+        && get(locationPath(locationId)).data.approvedCount is int
+        && get(locationPath(locationId)).data.approvedCount >= 0
+        && get(locationPath(locationId)).data.approvedCount < 50
+        && getAfter(locationPath(locationId)).data.approvedCount ==
+           get(locationPath(locationId)).data.approvedCount + 1
+        && getAfter(locationPath(locationId)).data.lastApprovedApplicantUid == uid;
+    }
+
+    // The reviewer decision does not exist BEFORE the atomic request
+    // but must exist AFTER it, with the same applicant/location/outcome/reviewer.
+    function matchingFreshDecision(uid, locationId, outcome) {
+      return !exists(decisionPath(uid))
+        && getAfter(decisionPath(uid)).data.applicantUid == uid
+        && getAfter(decisionPath(uid)).data.locationId == locationId
+        && getAfter(decisionPath(uid)).data.outcome == outcome
+        && getAfter(decisionPath(uid)).data.reviewerUid == request.auth.uid;
+    }
+
+    match /applicants/{uid} {
+      function validApplicationCreate() {
+        let d = request.resource.data;
+        return signedIn()
+          && request.auth.uid == uid
+          && d.keys().hasAll([
+            'displayName', 'persona', 'locationId', 'languageCodes',
+            'voiceSamplePath', 'status', 'submittedAt'
+          ])
+          && d.keys().hasOnly([
+            'displayName', 'persona', 'locationId', 'languageCodes',
+            'voiceSamplePath', 'status', 'submittedAt'
+          ])
+          && d.displayName is string
+          && d.displayName.trim().size() >= 2
+          && d.displayName.size() <= 120
+          && d.persona in ['public_creator', 'silent_expert']
+          && d.locationId is string
+          && d.languageCodes is list
+          && d.languageCodes.size() >= 1
+          && d.languageCodes.size() <= 10
+          && d.voiceSamplePath is string
+          && d.voiceSamplePath == 'voice_samples/' + uid + '/submission'
+          && d.status == 'submitted'
+          && d.submittedAt == request.time
+          && exists(locationPath(d.locationId))
+          && get(locationPath(d.locationId)).data.active == true;
+      }
+
+      function validStatusTransition() {
+        let d = request.resource.data;
+        return isReviewer()
+          && resource.data.status == 'submitted'
+          && d.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && d.status in ['approved', 'rejected']
+          && matchingFreshDecision(uid, resource.data.locationId, d.status)
+          && (d.status == 'rejected' ||
+              counterBumpedFor(uid, resource.data.locationId));
+      }
+
+      allow get: if (signedIn() && request.auth.uid == uid) || isReviewer();
+      allow list: if isReviewer();
+      allow create: if validApplicationCreate();
+      allow update: if validStatusTransition();
+      allow delete: if false;
+    }
+
+    // IDs are applicant UIDs, so a single final decision is possible per account.
+    match /reviewer_decisions/{uid} {
+      function validDecisionCreate() {
+        let d = request.resource.data;
+        return isReviewer()
+          && request.auth.uid != uid  // Prevent self-approval/rejection.
+          && d.keys().hasAll([
+            'applicantUid', 'locationId', 'outcome', 'reason',
+            'reviewerUid', 'decidedAt'
+          ])
+          && d.keys().hasOnly([
+            'applicantUid', 'locationId', 'outcome', 'reason',
+            'reviewerUid', 'decidedAt'
+          ])
+          && d.applicantUid == uid
+          && d.locationId is string
+          && d.outcome in ['approved', 'rejected']
+          && d.reason is string
+          && d.reason.trim().size() >= 10
+          && d.reason.size() <= 2000
+          && d.reviewerUid == request.auth.uid
+          && d.decidedAt == request.time
+          && get(applicantPath(uid)).data.status == 'submitted'
+          && get(applicantPath(uid)).data.locationId == d.locationId
+          && getAfter(applicantPath(uid)).data.status == d.outcome
+          && (d.outcome == 'rejected' ||
+              counterBumpedFor(uid, d.locationId));
+      }
+
+      allow get: if (signedIn() && request.auth.uid == uid) || isReviewer();
+      allow list: if isReviewer();
+      allow create: if validDecisionCreate();
+      allow update, delete: if false;
+    }
+
+    match /locations/{locationId} {
+      function validApprovalIncrement() {
+        let d = request.resource.data;
+        let uid = d.lastApprovedApplicantUid;
+        return isReviewer()
+          && d.diff(resource.data).affectedKeys().hasOnly([
+            'approvedCount', 'lastApprovedApplicantUid'
+          ])
+          && d.diff(resource.data).affectedKeys().hasAll([
+            'approvedCount', 'lastApprovedApplicantUid'
+          ])
+          && resource.data.active == true
+          && resource.data.approvedCount is int
+          && resource.data.approvedCount >= 0
+          && resource.data.approvedCount < 50
+          && d.approvedCount is int
+          && d.approvedCount == resource.data.approvedCount + 1
+          && d.approvedCount <= 50
+          && uid is string
+          && uid != resource.data.lastApprovedApplicantUid
+          && get(applicantPath(uid)).data.status == 'submitted'
+          && get(applicantPath(uid)).data.locationId == locationId
+          && !exists(decisionPath(uid))
+          && getAfter(applicantPath(uid)).data.status == 'approved'
+          && getAfter(decisionPath(uid)).data.applicantUid == uid
+          && getAfter(decisionPath(uid)).data.locationId == locationId
+          && getAfter(decisionPath(uid)).data.outcome == 'approved'
+          && getAfter(decisionPath(uid)).data.reviewerUid == request.auth.uid;
+      }
+
+      allow get, list: if signedIn();
+      // Admin-provision locations. Clients may only increment through approval.
+      allow create, delete: if false;
+      allow update: if validApprovalIncrement();
+    }
+
+    match /reviewers/{uid} {
+      // Read own allow-list entry for reviewer-console UX, not authorization.
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      // Prevent all self-enrolment and self-promotion.
+      allow create, update, delete: if false;
+    }
+
+    // Deny other supply-side or future collections until explicitly secured.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

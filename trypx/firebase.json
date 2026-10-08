@@ -1,0 +1,31 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "trypx-app",
+          "configurations": {
+            "android": "1:482480321873:android:487455f450fb49d31e8f70",
+            "ios": "1:482480321873:ios:dc451d7e9cea5e1a1e8f70",
+            "macos": "1:482480321873:ios:dc451d7e9cea5e1a1e8f70",
+            "web": "1:482480321873:web:b120a9d7a07de56a1e8f70",
+            "windows": "1:482480321873:web:b120a9d7a07de56a1e8f70"
+          }
+        }
+      },
+      "android": {
+        "default": {
+          "projectId": "trypx-app",
+          "appId": "1:482480321873:android:487455f450fb49d31e8f70",
+          "fileOutput": "android/app/google-services.json"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "nam5",
+    "rules": "firestore.rules",
+    "indexes": "n"
+  }
+}
