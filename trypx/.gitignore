@@ -43,7 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-# orchestrator tooling / secrets — never commit
+# orchestrator tooling / secrets â€” never commit
 opencode.json
 gsk_tools_list.txt
 auto_dev.py
@@ -52,3 +52,8 @@ run.log
 state.txt
 __pycache__/
 *.tar.gz
+
+# Firebase Secrets
+firebase_options.dart
+google-services.json
+GoogleService-Info.plist
