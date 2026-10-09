@@ -28,7 +28,7 @@ void main() {
     );
 
     // Initial state: not enabled
-    final submitButton = find.byType(TrypXPrimaryButton);
+    final submitButton = find.widgetWithText(TrypXPrimaryButton, 'Submit Decision');
     expect(tester.widget<TrypXPrimaryButton>(submitButton).enabled, isFalse);
 
     // Select an outcome

@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "482480321873-abaqdjn870t45qj0qcpvlllsg88163h0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tripstream.trypx",
+            "certificate_hash": "fc78778465dff00f8a3d10d7f47969ef573616e1"
+          }
+        },
+        {
           "client_id": "482480321873-u0es6np91hbqm9oeipcesa7da0km5nfj.apps.googleusercontent.com",
           "client_type": 3
         }

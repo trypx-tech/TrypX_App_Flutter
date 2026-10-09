@@ -11,6 +11,7 @@ import '../../../core/design_system/widgets/trypx_primary_button.dart';
 import '../../../core/design_system/widgets/trypx_text_field.dart';
 import '../../../data/providers.dart';
 import '../../../data/reviewer_repository.dart';
+import '../../../core/ai/tasks/applicant_authenticity_task.dart';
 
 class ReviewerQueueScreen extends ConsumerWidget {
   const ReviewerQueueScreen({super.key});
@@ -87,6 +88,9 @@ class _ApplicantDetailScreenState extends ConsumerState<ApplicantDetailScreen> {
   String? _evaluationResult;
   bool _isSubmitting = false;
 
+  bool _isAiLoading = false;
+  String? _aiRecommendationText;
+
   @override
   Widget build(BuildContext context) {
     final canSubmit = _outcome != null && _reason.length >= kMinDecisionReasonLength && !_isSubmitting;
@@ -107,6 +111,57 @@ class _ApplicantDetailScreenState extends ConsumerState<ApplicantDetailScreen> {
           const SizedBox(height: 8),
           const Text('Languages:', style: TextStyle(fontWeight: FontWeight.bold)),
           ...languageCodes.map((l) => Text('- $l')),
+          const Divider(height: 32),
+          
+          const Text('AI Assist (Advisory — a human decision is still required)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          if (_aiRecommendationText != null) ...[
+            Text(_aiRecommendationText!, style: const TextStyle(fontSize: 14)),
+            const SizedBox(height: 8),
+          ],
+          TrypXPrimaryButton(
+            text: _isAiLoading ? 'Loading AI...' : 'Get AI recommendation',
+            enabled: !_isAiLoading,
+            onPressed: () async {
+              setState(() {
+                _isAiLoading = true;
+                _aiRecommendationText = null;
+              });
+
+              try {
+                final router = ref.read(aiRouterProvider);
+                final task = const ApplicantAuthenticityTask();
+                
+                final input = {
+                  'persona': persona,
+                  'places': [locationId],
+                  'languages': languageCodes,
+                  'socialHandle': widget.applicantData['socialHandle'] ?? 'None',
+                };
+
+                final rec = await router.run(task, input);
+
+                if (mounted) {
+                  setState(() {
+                    _aiRecommendationText = 'Recommendation: ${rec.recommendation}\nConfidence: ${rec.confidence}\nReasons: ${rec.reasons.join(", ")}';
+                  });
+                }
+              } catch (e) {
+                if (mounted) {
+                  setState(() {
+                    _aiRecommendationText = 'Error: $e';
+                  });
+                }
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _isAiLoading = false;
+                  });
+                }
+              }
+            },
+          ),
+          
           const Divider(height: 32),
           const Text('Decision', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Wrap(

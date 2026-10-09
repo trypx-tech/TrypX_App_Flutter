@@ -7,6 +7,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'application_repository.dart';
 import 'reviewer_repository.dart';
+import '../core/ai/ai_router.dart';
+import '../core/ai/engines/proxy_engine.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
@@ -30,6 +32,11 @@ final reviewerQueueProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
 
 final googleSignInProvider = Provider<GoogleSignIn>((ref) {
   return GoogleSignIn.instance;
+});
+
+final aiRouterProvider = Provider<AiRouter>((ref) {
+  const apiKey = String.fromEnvironment('GSK_API_KEY');
+  return AiRouter(ProxyAiEngine(apiKey: apiKey));
 });
 
 Future<UserCredential> signInWithGoogle(WidgetRef ref) async {
