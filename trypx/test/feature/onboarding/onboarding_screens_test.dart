@@ -17,7 +17,7 @@ void main() {
     );
 
     // Initial state is roleSelect
-    expect(find.text(OnboardingStep.roleSelect.name), findsOneWidget);
+    expect(find.text('How will you use TrypX?'), findsOneWidget);
 
     // Both options rendered
     expect(find.text('Public Creator'), findsOneWidget);
@@ -28,7 +28,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Advanced to applicantLanding
-    expect(find.text(OnboardingStep.applicantLanding.name), findsOneWidget);
+    expect(find.text('Tell us about yourself'), findsOneWidget);
   });
 
   testWidgets('languages step blocks advance with zero languages and allows it after adding one', (tester) async {
@@ -48,18 +48,18 @@ void main() {
       ),
     );
 
-    expect(find.text(OnboardingStep.languages.name), findsOneWidget);
+    expect(find.text('Languages'), findsOneWidget);
 
     // Tap Next with 0 languages
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
     // Should still be on languages, and show error
-    expect(find.text(OnboardingStep.languages.name), findsOneWidget);
+    expect(find.text('Languages'), findsOneWidget);
     expect(find.textContaining('missingLanguage'), findsOneWidget); // The error reason is StepReason.missingLanguage
 
     // Add language
-    await tester.tap(find.text('Add English'));
+    await tester.tap(find.text('+ Add English'));
     await tester.pumpAndSettle();
 
     // Tap Next again
@@ -67,6 +67,6 @@ void main() {
     await tester.pumpAndSettle();
 
     // Advanced to interviewSlot
-    expect(find.text(OnboardingStep.interviewSlot.name), findsOneWidget);
+    expect(find.text('Schedule Interview'), findsOneWidget);
   });
 }

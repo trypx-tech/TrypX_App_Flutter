@@ -29,22 +29,25 @@ void main() {
 
     // Initial state: not enabled
     final submitButton = find.widgetWithText(TrypXPrimaryButton, 'Submit Decision');
+    await tester.drag(find.byType(ListView), const Offset(0, -1000));
+    await tester.pumpAndSettle();
     expect(tester.widget<TrypXPrimaryButton>(submitButton).enabled, isFalse);
 
     // Select an outcome
-    await tester.tap(find.text('approve'));
+    await tester.tap(find.text('APPROVE'));
     await tester.pumpAndSettle();
 
     // Still disabled because reason is empty
     expect(tester.widget<TrypXPrimaryButton>(submitButton).enabled, isFalse);
 
     // Enter a reason with 9 characters
-    await tester.enterText(find.byType(TrypXTextField), '123456789');
+    final reasonField = find.byType(TrypXTextField);
+    await tester.enterText(reasonField, '123456789');
     await tester.pumpAndSettle();
     expect(tester.widget<TrypXPrimaryButton>(submitButton).enabled, isFalse);
 
     // Enter a reason with 10 characters
-    await tester.enterText(find.byType(TrypXTextField), '1234567890');
+    await tester.enterText(reasonField, '1234567890');
     await tester.pumpAndSettle();
     expect(tester.widget<TrypXPrimaryButton>(submitButton).enabled, isTrue);
   });
